@@ -1,0 +1,117 @@
+# general settings
+name: CLIPDenoising_sRGBDenoising_FixedPoissonGaussian
+model_type: ImageCleanModel
+scale: 1
+num_gpu: 1  # set num_gpu: 0 for cpu mode
+manual_seed: 100
+
+# dataset and data loader settings
+datasets:
+  train:
+    name: TrainSet
+    type: Dataset_SyntheticDenoising
+    dataroot_gt: /data0/cj/dataset/DIV2K/DIV2K_train_HR_sub
+    dataroot_lq: /data0/cj/dataset/DIV2K/DIV2K_synthesis_srgbnoise_strict2/noisy
+    geometric_augs: true
+
+    filename_tmpl: '{}'
+    io_backend:
+      type: disk
+
+    # data loader
+    use_shuffle: true
+    num_worker_per_gpu: 8
+    batch_size_per_gpu: 16
+
+    mini_batch_sizes: [16]   
+    iters: [300000]
+    gt_size: 128   
+    gt_sizes: [128]
+    ### ------------------------------------------------------------
+
+    dataset_enlarge_ratio: 1
+    prefetch_mode: ~
+
+  val:
+    name: ValSet
+    type: Dataset_SyntheticDenoising
+    dataroot_gt: /data0/cj/dataset/SSID/SIDD_test_PNG/GT
+    dataroot_lq: /data0/cj/dataset/SSID/SIDD_test_PNG/noisy
+    io_backend:
+      type: disk
+
+# network structures
+network_g:
+  type: CLIPDenoising
+  inp_channels: 3
+  out_channels: 3
+  depth: 5
+  wf: 64 
+  num_blocks: [3, 4, 6, 3] 
+  bias: false
+  model_path: /data0/cj/model_data/ldm/stable-diffusion/RN50.pt
+  aug_level: 0.05
+
+# path
+path:
+  pretrain_network_g: ~
+  strict_load_g: true
+  resume_state: ~
+
+# training settings
+train:
+  total_iter: 300000
+  warmup_iter: -1 # no warm up
+  use_grad_clip: true
+
+  scheduler:
+    type: CosineAnnealingRestartCyclicLR
+    periods: [92000, 208000]       
+    restart_weights: [1,1]
+    eta_mins: [0.0003,0.000001]   
+  
+  mixing_augs:
+    mixup: true
+    mixup_beta: 1.2
+    use_identity: true
+
+  optim_g:
+    type: AdamW
+    lr: !!float 3e-4
+    weight_decay: !!float 1e-4
+    betas: [0.9, 0.999]
+  
+  # losses
+  pixel_opt:
+    type: L1Loss
+    loss_weight: 1
+    reduction: mean
+
+# validation settings
+val:
+  window_size: 32
+  val_freq: !!float 4e3
+  save_img: false
+  rgb2bgr: true
+  use_image: false
+  max_minibatch: 8
+
+  metrics:
+    psnr: # metric name, can be arbitrary
+      type: calculate_psnr
+      crop_border: 0
+      test_y_channel: false
+
+# logging settings
+logger:
+  print_freq: 1000
+  save_checkpoint_freq: !!float 1e5
+  use_tb_logger: false
+  wandb:
+    project: ~
+    resume_id: ~
+
+# dist training settings
+dist_params:
+  backend: nccl
+  port: 29500
